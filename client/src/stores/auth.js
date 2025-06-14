@@ -6,6 +6,7 @@ import { auth, db } from '@/Config/firebase'
 
 // Core auth state
 const isAuthenticated = ref(false)
+const isAuthLoading = ref(true) // Add loading state
 const userClaims = ref(null)
 const currentUser = ref(null)
 
@@ -35,10 +36,14 @@ export const useAuthStore = () => {
         
       } catch (error) {
         console.error('Error getting user data:', error)
+      } finally {
+        isAuthLoading.value = false
+        console.error('Error getting user data:', error)
       }
     } else {
       // Clear all user data on logout
       clearUserData()
+      isAuthLoading.value = false
     }
   })
 
@@ -163,6 +168,7 @@ export const useAuthStore = () => {
   return {
     // Auth state
     isAuthenticated: computed(() => isAuthenticated.value),
+    isAuthLoading: computed(() => isAuthLoading.value),
     isAdmin: computed(() => userClaims.value?.admin === true),
     isServiceProvider: computed(() => userClaims.value?.serviceProvider === true),
     
