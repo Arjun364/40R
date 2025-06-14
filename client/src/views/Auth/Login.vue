@@ -10,19 +10,18 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 
-const handleLogin = () => {
+const handleLogin = async () => {
   // Basic validation
   if (!email.value || !password.value) {
     error.value = 'Please fill in all fields'
     return
   }
 
-  // TODO: Replace with actual authentication API call
-  if (email.value === 'admin@example.com' && password.value === 'admin') {
-    authLogin() // This will update both localStorage and reactive state
+  try {
+    await authLogin(email.value, password.value)
     router.push('/dashboard')
-  } else {
-    error.value = 'Invalid credentials'
+  } catch (e) {
+    error.value = e.message || 'Login failed'
   }
 }
 </script>
