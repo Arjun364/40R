@@ -93,6 +93,9 @@ export const useAuthStore = () => {
   const login = async (email, password) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
+
+      console.log("userCredential", userCredential);
+      
       
       if (userCredential.user) {
         // Get fresh token with claims

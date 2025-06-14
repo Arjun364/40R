@@ -1,9 +1,12 @@
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
+import { db } from '@/Config/firebase'
+import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore'
 
 // Reactive state
 const showCreateForm = ref(true)
 const searchQuery = ref('')
+const services = ref([])
 
 const newService = reactive({
   name: '',
@@ -11,37 +14,6 @@ const newService = reactive({
   price: '',
   description: ''
 })
-
-const services = ref([
-  {
-    id: 1,
-    name: 'Website Development',
-    type: 'Premium',
-    price: 25000,
-    description: 'Complete website development with responsive design and modern features.'
-  },
-  {
-    id: 2,
-    name: 'Mobile App Design',
-    type: 'Deluxe',
-    price: 40000,
-    description: 'Premium mobile app design with UI/UX optimization and prototyping.'
-  },
-  {
-    id: 3,
-    name: 'SEO Optimization',
-    type: 'Basic',
-    price: 8000,
-    description: 'Basic SEO optimization for better search engine rankings.'
-  },
-  {
-    id: 4,
-    name: 'Logo Design',
-    type: 'Premium',
-    price: 12000,
-    description: 'Professional logo design with multiple concepts and revisions.'
-  }
-])
 
 // Computed properties
 const filteredServices = computed(() => {
@@ -54,31 +26,55 @@ const filteredServices = computed(() => {
 })
 
 // Methods
-const createService = () => {
+const fetchServices = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'services'))
+    services.value = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+  } catch (error) {
+    console.error('Error fetching services:', error)
+    alert('Error loading services. Please try again.')
+  }
+}
+
+const createService = async () => {
   if (!newService.name || !newService.type || !newService.price) {
     alert('Please fill in all required fields')
     return
   }
 
-  const service = {
-    id: Date.now(),
-    name: newService.name,
-    type: newService.type,
-    price: parseFloat(newService.price),
-    description: newService.description || 'No description provided'
-  }
+  try {
+    const service = {
+      name: newService.name,
+      type: newService.type,
+      price: parseFloat(newService.price),
+      createdAt: new Date(),  
+      description: newService.description || 'No description provided'
+    }
 
-  services.value.push(service)
-  
-  // Reset form
-  Object.assign(newService, {
-    name: '',
-    type: '',
-    price: '',
-    description: ''
-  })
-  
-  showCreateForm.value = false
+    const docRef = await addDoc(collection(db, 'services'), service)
+    
+    // Add the new service to the local state with the Firebase document ID
+    services.value.push({
+      id: docRef.id,
+      ...service
+    })
+    
+    // Reset form
+    Object.assign(newService, {
+      name: '',
+      type: '',
+      price: '',
+      description: ''
+    })
+    
+    showCreateForm.value = true
+  } catch (error) {
+    console.error('Error creating service:', error)
+    alert('Error creating service. Please try again.')
+  }
 }
 
 const editService = (service) => {
@@ -86,11 +82,22 @@ const editService = (service) => {
   console.log('Edit service:', service)
 }
 
-const deleteService = (serviceId) => {
+const deleteService = async (serviceId) => {
   if (confirm('Are you sure you want to delete this service?')) {
-    services.value = services.value.filter(service => service.id !== serviceId)
+    try {
+      await deleteDoc(doc(db, 'services', serviceId))
+      services.value = services.value.filter(service => service.id !== serviceId)
+    } catch (error) {
+      console.error('Error deleting service:', error)
+      alert('Error deleting service. Please try again.')
+    }
   }
 }
+
+// Load services when component mounts
+onMounted(() => {
+  fetchServices()
+})
 </script>
 <template>
   <div class="max-w-7xl  min-h-[80vh]">

@@ -1,12 +1,13 @@
 <script setup>
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, onMounted ,ref} from 'vue'
 import { useAuthStore } from '@/stores/auth' 
 import image from './assets/logo.svg'
 
 const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, isAuthLoading, logout: authLogout } = useAuthStore()
+const currentUser = ref()
 
 const showNavigation = computed(() => {
   if (route.name === 'login') return false
@@ -15,6 +16,10 @@ const showNavigation = computed(() => {
 const currentRoute = computed(() => route.name)
 console.log("isAuthenticated", isAuthenticated.value)
 
+const getCurrentUserData = ()=>{
+  currentUser.value = JSON.parse(localStorage.getItem('userProfile'))
+}
+
 const logout = async () => {
   await authLogout()
   await router.push({
@@ -22,6 +27,10 @@ const logout = async () => {
     path: '/login'
   })
 }
+
+onMounted(()=>{
+  getCurrentUserData()
+})
 </script>
 
 <template>
@@ -77,7 +86,7 @@ const logout = async () => {
         <template v-else>
           <div>{{ currentRoute }}</div>
           <div class="flex items-center gap-2">
-            <span>name</span>
+            <span>{{ currentUser.username }}</span>
             <img :src="image" class="w-10 h-10" alt="user image">
           </div>
         </template>
