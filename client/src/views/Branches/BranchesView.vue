@@ -1,3 +1,133 @@
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { db } from '@/Config/firebase'
+import { collection, addDoc, getDocs, doc, deleteDoc } from 'firebase/firestore'
+
+// Reactive state
+const isLoading = ref(true)
+const isSubmitting = ref(false)
+const showCreateForm = ref(false)
+const branches = ref([])
+const availableServices = ref([])
+
+// New branch form data
+const newBranch = reactive({
+  name: '',
+  location: '',
+  selectedServices: [],
+  slots: {
+    morning: 0,
+    noon: 0,
+    evening: 0
+  }
+})
+
+// Methods
+const fetchBranches = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'branches'))
+    branches.value = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+  } catch (error) {
+    console.error('Error fetching branches:', error)
+    alert('Error loading branches. Please try again.')
+  }
+}
+
+const fetchServices = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'services'))
+    availableServices.value = querySnapshot.docs.map(doc => {
+      const service = doc.data()
+      return {
+        id: doc.id,
+        name: service.name,
+        type: service.type,
+        badgeClass: getServiceBadgeClass(service.type)
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching services:', error)
+    alert('Error loading services. Please try again.')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const createBranch = async () => {
+  if (newBranch.name && newBranch.location && newBranch.selectedServices.length > 0) {
+    isSubmitting.value = true
+    try {
+      const branch = {
+        name: newBranch.name,
+        location: newBranch.location,
+        services: [...newBranch.selectedServices],
+        slots: { ...newBranch.slots },
+        createdAt: new Date()
+      }
+      
+      const docRef = await addDoc(collection(db, 'branches'), branch)
+      
+      // Add the new branch to the local state
+      branches.value.push({
+        id: docRef.id,
+        ...branch
+      })
+      
+      closeCreateForm()
+    } catch (error) {
+      console.error('Error creating branch:', error)
+      alert('Error creating branch. Please try again.')
+    } finally {
+      isSubmitting.value = false
+    }
+  }
+}
+
+const deleteBranch = async (branchId) => {
+  try {
+    await deleteDoc(doc(db, 'branches', branchId))
+    // Remove the branch from local state
+    branches.value = branches.value.filter(branch => branch.id !== branchId)
+  } catch (error) {
+    console.error('Error deleting branch:', error)
+    alert('Error deleting branch. Please try again.')
+  }
+}
+
+const openCreateForm = () => {
+  console.log('Opening create form...')
+  showCreateForm.value = true
+}
+
+const closeCreateForm = () => {
+  showCreateForm.value = false
+  // Reset form
+  Object.assign(newBranch, {
+    name: '',
+    location: '',
+    selectedServices: [],
+    slots: { morning: 0, noon: 0, evening: 0 }
+  })
+}
+
+const getServiceBadgeClass = (type) => {
+  const typeMap = {
+    'basic': 'bg-blue-100 text-blue-800',
+    'premium': 'bg-green-100 text-green-800',
+    'deluxe': 'bg-purple-100 text-purple-800'
+  }
+  return typeMap[type.toLowerCase()] || 'bg-gray-100 text-gray-800'
+}
+
+// Load data when component mounts
+onMounted(() => {
+  Promise.all([fetchBranches(), fetchServices()])
+})
+</script>
+
 <template>
   <div class="p-6 bg-gray-50 min-h-[90vh] overflow-y-scroll">
     <!-- Header -->
@@ -11,7 +141,7 @@
         <h1 class="text-2xl font-semibold text-gray-900">Branch Management</h1>
       </div>
       <button 
-        @click="showCreateForm = true"
+        @click="openCreateForm"
         class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -28,18 +158,39 @@
         <p class="text-gray-600 mt-1">Manage your branch locations and services</p>
       </div>
 
-      <!-- Table Header -->
-      <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div class="grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
-          <div class="col-span-3">BRANCH NAME</div>
-          <div class="col-span-3">ASSIGNED SERVICES</div>
-          <div class="col-span-4">SLOTS SUMMARY</div>
-          <div class="col-span-2">ACTIONS</div>
+      <!-- Loading State -->
+      <div v-if="isLoading" class="px-6 py-12">
+        <div class="flex flex-col items-center justify-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p class="mt-4 text-gray-600">Loading branches...</p>
         </div>
       </div>
 
-      <!-- Branch List -->
-      <div class="divide-y divide-gray-200">
+      <!-- No Records State -->
+      <div v-else-if="branches.length === 0" class="px-6 py-12">
+        <div class="flex flex-col items-center justify-center">
+          <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+          </svg>
+          <h3 class="mt-4 text-lg font-medium text-gray-900">No branches found</h3>
+          <p class="mt-1 text-gray-600">Get started by creating your first branch</p>
+        </div>
+      </div>
+
+      <!-- Table Content -->
+      <div v-else>
+        <!-- Table Header -->
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <div class="grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
+            <div class="col-span-3">BRANCH NAME</div>
+            <div class="col-span-3">ASSIGNED SERVICES</div>
+            <div class="col-span-4">SLOTS SUMMARY</div>
+            <div class="col-span-2">ACTIONS</div>
+          </div>
+        </div>
+
+        <!-- Branch List -->
+        <div class="divide-y divide-gray-200">
         <div v-for="branch in branches" :key="branch.id" class="px-6 py-4 hover:bg-gray-50">
           <div class="grid grid-cols-12 gap-4 items-center">
             <!-- Branch Name -->
@@ -90,7 +241,10 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                   </svg>
                 </button>
-                <button class="p-2 text-gray-400 hover:text-red-600 transition-colors">
+                <button
+                  @click="deleteBranch(branch.id)"
+                  class="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                   </svg>
@@ -98,6 +252,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -211,11 +366,13 @@
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              :disabled="isSubmitting"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Create Branch
+              <div v-if="isSubmitting" class="animate-spin rounded-full h-4 w-4 border-2 border-white"></div>
+              {{ isSubmitting ? 'Creating...' : 'Create Branch' }}
             </button>
           </div>
         </form>
@@ -223,99 +380,3 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { ref, reactive } from 'vue'
-
-// Reactive data
-const showCreateForm = ref(false)
-
-// Sample branches data
-const branches = ref([
-  {
-    id: 1,
-    name: 'Downtown Branch',
-    location: 'Main Location',
-    services: ['Haircut', 'Beard Trim', 'Facial'],
-    slots: { morning: 5, noon: 8, evening: 3 }
-  },
-  {
-    id: 2,
-    name: 'Westside Branch',
-    location: 'Secondary Location',
-    services: ['Haircut', 'Hair Color', 'Styling'],
-    slots: { morning: 3, noon: 6, evening: 4 }
-  },
-  {
-    id: 3,
-    name: 'Eastside Branch',
-    location: 'Premium Location',
-    services: ['Haircut', 'Beard Trim', 'Facial', 'Massage'],
-    slots: { morning: 4, noon: 10, evening: 6 }
-  }
-])
-
-// Available services for selection
-const availableServices = ref([
-  { id: 'haircut', name: 'Haircut', type: 'Basic', badgeClass: 'bg-blue-100 text-blue-800' },
-  { id: 'beard-trim', name: 'Beard Trim', type: 'Basic', badgeClass: 'bg-blue-100 text-blue-800' },
-  { id: 'hair-color', name: 'Hair Color', type: 'Premium', badgeClass: 'bg-green-100 text-green-800' },
-  { id: 'facial', name: 'Facial', type: 'Premium', badgeClass: 'bg-green-100 text-green-800' },
-  { id: 'styling', name: 'Styling', type: 'Premium', badgeClass: 'bg-green-100 text-green-800' },
-  { id: 'massage', name: 'Massage', type: 'Deluxe', badgeClass: 'bg-purple-100 text-purple-800' },
-  { id: 'manicure', name: 'Manicure', type: 'Premium', badgeClass: 'bg-green-100 text-green-800' },
-  { id: 'pedicure', name: 'Pedicure', type: 'Premium', badgeClass: 'bg-green-100 text-green-800' }
-])
-
-// New branch form data
-const newBranch = reactive({
-  name: '',
-  location: '',
-  selectedServices: [],
-  slots: {
-    morning: 0,
-    noon: 0,
-    evening: 0
-  }
-})
-
-// Methods
-const getServiceBadgeClass = (service) => {
-  const serviceMap = {
-    'Haircut': 'bg-blue-100 text-blue-800',
-    'Beard Trim': 'bg-blue-100 text-blue-800',
-    'Hair Color': 'bg-green-100 text-green-800',
-    'Facial': 'bg-green-100 text-green-800',
-    'Styling': 'bg-green-100 text-green-800',
-    'Massage': 'bg-purple-100 text-purple-800'
-  }
-  return serviceMap[service] || 'bg-gray-100 text-gray-800'
-}
-
-const closeCreateForm = () => {
-  showCreateForm.value = false
-  // Reset form
-  newBranch.name = ''
-  newBranch.location = ''
-  newBranch.selectedServices = []
-  newBranch.slots = { morning: 0, noon: 0, evening: 0 }
-}
-
-const createBranch = () => {
-  if (newBranch.name && newBranch.location && newBranch.selectedServices.length > 0) {
-    const branch = {
-      id: branches.value.length + 1,
-      name: newBranch.name,
-      location: newBranch.location,
-      services: [...newBranch.selectedServices],
-      slots: { ...newBranch.slots }
-    }
-    
-    branches.value.push(branch)
-    closeCreateForm()
-    
-    // You can add success notification here
-    console.log('Branch created successfully:', branch)
-  }
-}
-</script>
