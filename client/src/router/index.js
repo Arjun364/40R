@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { auth } from '@/Config/firebase'
 import LoginView from '@/views/Auth/Login.vue'
 import DashboardView from '@/views/Dashboard/DashboardView.vue'
 import BranchesView from '@/views/Branches/BranchesView.vue'
@@ -39,16 +40,18 @@ const router = createRouter({
 
 // Navigation guard
 router.beforeEach((to, from, next) => {
-  // TODO: Replace with your actual authentication check
-  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true'
-  
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login')
-  } else if (to.path === '/login' && isAuthenticated) {
-    next('/dashboard')
-  } else {
-    next()
-  }
+  const unsubscribe = auth.onAuthStateChanged(user => {
+    if (to.meta.requiresAuth && !user) {
+      // If route requires auth and user is not logged in, redirect to login
+      next('/login')
+    } else if (to.path === '/login' && user) {
+      // If trying to access login while logged in, redirect to dashboard
+      next('/dashboard')
+    } else {
+      next()
+    }
+    unsubscribe()
+  })
 })
 
 export default router

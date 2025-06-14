@@ -2,18 +2,19 @@
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth' 
+import image from './assets/logo.svg'
 
 const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, logout: authLogout } = useAuthStore()
 
 const showNavigation = computed(() => isAuthenticated.value && route.name !== 'login')
-
+const currentRoute = computed(() => route.name)
 console.log("isAuthenticated", isAuthenticated.value)
 
-const logout = () => {
-  authLogout()
-  router.push({
+const logout = async () => {
+  await authLogout()
+  await router.push({
     name: 'login',
     path: '/login'
   })
@@ -49,7 +50,14 @@ const logout = () => {
     </nav>
 
     <!-- Main Content -->
-    <main class="flex-1 p-8 bg-gray-50">
+    <main class="flex-1 px-8 bg-gray-50">
+      <div v-if="showNavigation" class="w-full  h-[5rem] flex items-center justify-between">
+       <div>{{ currentRoute }}</div>
+       <div class="flex items-center gap-2">
+         <span>name</span>
+          <img :src="image" class="w-10 h-10" alt="user image">
+       </div>
+      </div>
       <RouterView />
     </main>
   </div>
