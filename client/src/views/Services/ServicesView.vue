@@ -1,12 +1,16 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
 import { db } from '@/Config/firebase'
-import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore'
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore'
 
 // Reactive state
-const showCreateForm = ref(true)
+const isLoading = ref(true)
+const isSaving = ref(false)
+const showForm = ref(true)
 const searchQuery = ref('')
 const services = ref([])
+const isEditing = ref(false)
+const editingServiceId = ref(null)
 
 const newService = reactive({
   name: '',
@@ -27,6 +31,7 @@ const filteredServices = computed(() => {
 
 // Methods
 const fetchServices = async () => {
+  isLoading.value = true
   try {
     const querySnapshot = await getDocs(collection(db, 'services'))
     services.value = querySnapshot.docs.map(doc => ({
@@ -36,10 +41,13 @@ const fetchServices = async () => {
   } catch (error) {
     console.error('Error fetching services:', error)
     alert('Error loading services. Please try again.')
+  } finally {
+    isLoading.value = false
   }
 }
 
 const createService = async () => {
+  isSaving.value = true
   if (!newService.name || !newService.type || !newService.price) {
     alert('Please fill in all required fields')
     return
@@ -70,16 +78,71 @@ const createService = async () => {
       description: ''
     })
     
-    showCreateForm.value = true
+    showForm.value = true
   } catch (error) {
     console.error('Error creating service:', error)
     alert('Error creating service. Please try again.')
+  } finally {
+    isSaving.value = false
   }
 }
 
 const editService = (service) => {
-  // Implementation for edit functionality
-  console.log('Edit service:', service)
+  isEditing.value = true
+  editingServiceId.value = service.id
+  showForm.value = true
+  Object.assign(newService, {
+    name: service.name,
+    type: service.type,
+    price: service.price,
+    description: service.description || ''
+  })
+}
+
+const updateService = async () => {
+  isSaving.value = true
+  if (!newService.name || !newService.type || !newService.price) {
+    alert('Please fill in all required fields')
+    return
+  }
+
+  try {
+    const serviceRef = doc(db, 'services', editingServiceId.value)
+    const updatedService = {
+      name: newService.name,
+      type: newService.type,
+      price: parseFloat(newService.price),
+      description: newService.description || 'No description provided',
+      updatedAt: new Date()
+    }
+
+    await updateDoc(serviceRef, updatedService)
+    
+    // Update the service in the local state
+    const index = services.value.findIndex(s => s.id === editingServiceId.value)
+    if (index !== -1) {
+      services.value[index] = {
+        id: editingServiceId.value,
+        ...updatedService
+      }
+    }
+
+    // Reset form and editing state
+    Object.assign(newService, {
+      name: '',
+      type: '',
+      price: '',
+      description: ''
+    })
+    isEditing.value = false
+    editingServiceId.value = null
+    showForm.value = true
+  } catch (error) {
+    console.error('Error updating service:', error)
+    alert('Error updating service. Please try again.')
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const deleteService = async (serviceId) => {
@@ -113,14 +176,14 @@ onMounted(() => {
       <!-- Create New Service Form -->
       <div class="bg-gray-50 rounded-xl overflow-hidden">
         <div 
-          @click="showCreateForm = !showCreateForm"
+          @click="showForm = !showForm"
           class="px-5 py-4 bg-white border-b border-gray-200 cursor-pointer flex items-center gap-2.5 font-medium text-gray-700"
         >
-          <span class="text-lg text-indigo-600">{{ showCreateForm ? '−' : '+' }}</span>
-          Create New Service
+          <span class="text-lg text-indigo-600">{{ showForm ? '−' : '+' }}</span>
+          {{ isEditing ? 'Edit Service' : 'Create New Service' }}
         </div>
         
-        <div v-if="showCreateForm" class="p-5">
+        <div v-if="showForm" class="p-5">
           <div class="mb-5">
             <label for="serviceName" class="block mb-1.5 font-medium text-gray-700 text-sm">Service Name</label>
             <input 
@@ -171,10 +234,15 @@ onMounted(() => {
           </div>
 
           <button 
-            @click="createService" 
-            class="w-full bg-indigo-600 text-white border-none px-3 py-3 rounded-md font-medium cursor-pointer hover:bg-indigo-700 transition-colors"
+            @click="isEditing ? updateService() : createService()"
+            :disabled="isSaving"
+            class="w-full bg-indigo-600 text-white border-none px-3 py-3 rounded-md font-medium cursor-pointer hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Create Service
+            <svg v-if="isSaving" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isEditing ? 'Update Service' : 'Create Service' }}
           </button>
         </div>
       </div>
@@ -193,11 +261,26 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <!-- Loading Skeletons -->
+        <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div v-for="n in 6" :key="n" class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex justify-between items-start mb-3">
+              <div class="w-full">
+                <div class="h-5 bg-gray-200 rounded w-3/4 mb-2 animate-pulse"></div>
+                <div class="h-4 bg-gray-200 rounded w-1/4 animate-pulse"></div>
+              </div>
+            </div>
+            <div class="h-8 bg-gray-200 rounded w-1/3 mb-2 animate-pulse"></div>
+            <div class="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+          </div>
+        </div>
+
+        <!-- Services Grid -->
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 max-h-[calc(100vh-300px)] overflow-y-scroll ">
           <div 
             v-for="service in filteredServices" 
             :key="service.id"
-            class="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-lg transition-shadow"
+            class="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-lg transition-shadow "
           >
             <div class="flex justify-between items-start mb-3">
               <div>
