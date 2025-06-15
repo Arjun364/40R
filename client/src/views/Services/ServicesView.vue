@@ -14,6 +14,8 @@ const searchQuery = ref('')
 const services = ref([])
 const isEditing = ref(false)
 const editingServiceId = ref(null)
+const showDeleteConfirm = ref(false)
+const serviceToDelete = ref(null)
 
 const newService = reactive({
   name: '',
@@ -57,13 +59,15 @@ const createService = async () => {
     return
   }
 
-  // Check if service with same name already exists
+  // Check if service with same name and type already exists
   const existingService = services.value.find(
-    service => service.name.toLowerCase() === newService.name.toLowerCase()
+    service => 
+      service.name.toLowerCase() === newService.name.toLowerCase() &&
+      service.type.toLowerCase() === newService.type.toLowerCase()
   )
   
   if (existingService) {
-    toast.warning('A service with this name already exists')
+    toast.warning(`A ${newService.type} service with name "${newService.name}" already exists`)
     isSaving.value = false
     return
   }
@@ -123,6 +127,20 @@ const updateService = async () => {
     return
   }
 
+  // Check if another service with same name and type exists (excluding current service)
+  const existingService = services.value.find(
+    service => 
+      service.id !== editingServiceId.value &&
+      service.name.toLowerCase() === newService.name.toLowerCase() &&
+      service.type.toLowerCase() === newService.type.toLowerCase()
+  )
+  
+  if (existingService) {
+    toast.warning(`A ${newService.type} service with name "${newService.name}" already exists`)
+    isSaving.value = false
+    return
+  }
+
   try {
     const serviceRef = doc(db, 'services', editingServiceId.value)
     const updatedService = {
@@ -163,16 +181,21 @@ const updateService = async () => {
   }
 }
 
-const deleteService = async (serviceId) => {
-  if (confirm('Are you sure you want to delete this service?')) {
-    try {
-      await deleteDoc(doc(db, 'services', serviceId))
-      services.value = services.value.filter(service => service.id !== serviceId)
-      toast.success('Service deleted successfully!')
-    } catch (error) {
-      console.error('Error deleting service:', error)
-      toast.error('Failed to delete service. Please try again.')
-    }
+const confirmDelete = (service) => {
+  serviceToDelete.value = service
+  showDeleteConfirm.value = true
+}
+
+const deleteService = async () => {
+  try {
+    await deleteDoc(doc(db, 'services', serviceToDelete.value.id))
+    services.value = services.value.filter(service => service.id !== serviceToDelete.value.id)
+    toast.success('Service deleted successfully!')
+    showDeleteConfirm.value = false
+    serviceToDelete.value = null
+  } catch (error) {
+    console.error('Error deleting service:', error)
+    toast.error('Failed to delete service. Please try again.')
   }
 }
 
@@ -181,6 +204,7 @@ onMounted(() => {
   fetchServices()
 })
 </script>
+
 <template>
   <div class="max-w-7xl  min-h-[80vh]">
     <!-- Header -->
@@ -323,7 +347,7 @@ onMounted(() => {
                   ✏️
                 </button>
                 <button 
-                  @click="deleteService(service.id)"
+                  @click="confirmDelete(service)"
                   class="bg-transparent border-none p-1.5 cursor-pointer rounded hover:bg-gray-100 transition-colors"
                 >
                   🗑️
@@ -339,6 +363,32 @@ onMounted(() => {
               {{ service.description }}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Service</h3>
+          <p class="text-gray-600">
+            Are you sure you want to delete service "{{ serviceToDelete?.name }}"? This action cannot be undone.
+          </p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 rounded-b-lg">
+          <button
+            @click="showDeleteConfirm = false"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="deleteService"
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+          >
+            Delete Service
+          </button>
         </div>
       </div>
     </div>

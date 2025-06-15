@@ -240,10 +240,10 @@ onMounted(loadData)
                 <div class="flex flex-wrap gap-2">
                   <span
                     v-for="service in branch.services"
-                    :key="service.id"
-                    :class="service.badgeClass"
+                    :key="service?.id"
+                    :class="service?.badgeClass"
                     class="px-2 py-1 rounded-full text-xs font-medium">
-                    {{ service.name }}
+                    {{ service?.name }}
                   </span>
                 </div>
               </td>
