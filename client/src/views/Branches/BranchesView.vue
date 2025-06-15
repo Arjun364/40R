@@ -4,17 +4,19 @@ import { db } from '@/Config/firebase'
 import { collection, addDoc, getDocs, doc, deleteDoc } from 'firebase/firestore'
 
 // Reactive state
-const isLoading = ref(true)
+const isLoading = ref(false)
+const isFetching = ref(false)
 const isSubmitting = ref(false)
 const showCreateForm = ref(false)
 const branches = ref([])
 const availableServices = ref([])
+const servicesMap = ref({}) // Map to store service details by ID
 
 // New branch form data
 const newBranch = reactive({
   name: '',
   location: '',
-  selectedServices: [],
+  selectedServiceIds: [], // Changed to store IDs instead of names
   slots: {
     morning: 0,
     noon: 0,
@@ -23,23 +25,46 @@ const newBranch = reactive({
 })
 
 // Methods
+const loadData = async () => {
+  isLoading.value = true
+  try {
+    await Promise.all([fetchServices(), fetchBranches()])
+  } catch (error) {
+    console.error('Error loading data:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
 const fetchBranches = async () => {
+  isFetching.value = true
   try {
     const querySnapshot = await getDocs(collection(db, 'branches'))
-    branches.value = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
+    branches.value = querySnapshot.docs.map(doc => {
+      const data = doc.data()
+      const services = data.serviceIds.map(serviceId => servicesMap.value[serviceId])
+      return {
+        id: doc.id,
+        name: data.name,
+        location: data.location,
+        services: services,
+        slots: data.slots,
+        createdAt: data.createdAt
+      }
+    })
   } catch (error) {
     console.error('Error fetching branches:', error)
     alert('Error loading branches. Please try again.')
+  } finally {
+    isFetching.value = false
   }
 }
 
 const fetchServices = async () => {
+  servicesMap.value = {} // Reset map before fetching
   try {
     const querySnapshot = await getDocs(collection(db, 'services'))
-    availableServices.value = querySnapshot.docs.map(doc => {
+    const services = querySnapshot.docs.map(doc => {
       const service = doc.data()
       return {
         id: doc.id,
@@ -48,33 +73,37 @@ const fetchServices = async () => {
         badgeClass: getServiceBadgeClass(service.type)
       }
     })
+    
+    // Update available services
+    availableServices.value = services
+    
+    // Create a map of service details by ID
+    servicesMap.value = services.reduce((acc, service) => {
+      acc[service.id] = service
+      return acc
+    }, {})
+    
   } catch (error) {
     console.error('Error fetching services:', error)
     alert('Error loading services. Please try again.')
-  } finally {
-    isLoading.value = false
   }
 }
 
 const createBranch = async () => {
-  if (newBranch.name && newBranch.location && newBranch.selectedServices.length > 0) {
+  if (newBranch.name && newBranch.location && newBranch.selectedServiceIds.length > 0) {
     isSubmitting.value = true
     try {
       const branch = {
         name: newBranch.name,
         location: newBranch.location,
-        services: [...newBranch.selectedServices],
+        serviceIds: [...newBranch.selectedServiceIds],
         slots: { ...newBranch.slots },
         createdAt: new Date()
       }
       
-      const docRef = await addDoc(collection(db, 'branches'), branch)
-      
-      // Add the new branch to the local state
-      branches.value.push({
-        id: docRef.id,
-        ...branch
-      })
+      await addDoc(collection(db, 'branches'), branch)
+      // Refresh the branches list
+      await fetchBranches()
       
       closeCreateForm()
     } catch (error) {
@@ -108,7 +137,7 @@ const closeCreateForm = () => {
   Object.assign(newBranch, {
     name: '',
     location: '',
-    selectedServices: [],
+    selectedServiceIds: [],
     slots: { morning: 0, noon: 0, evening: 0 }
   })
 }
@@ -123,9 +152,7 @@ const getServiceBadgeClass = (type) => {
 }
 
 // Load data when component mounts
-onMounted(() => {
-  Promise.all([fetchBranches(), fetchServices()])
-})
+onMounted(loadData)
 </script>
 
 <template>
@@ -157,9 +184,9 @@ onMounted(() => {
         <h2 class="text-xl font-semibold text-gray-900">All Branches</h2>
         <p class="text-gray-600 mt-1">Manage your branch locations and services</p>
       </div>
-
-      <!-- Loading State -->
-      <div v-if="isLoading" class="px-6 py-12">
+      
+            <!-- Loading State -->
+            <div v-if="isLoading || isFetching" class="px-6 py-12">
         <div class="flex flex-col items-center justify-center">
           <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           <p class="mt-4 text-gray-600">Loading branches...</p>
@@ -177,83 +204,50 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Table Content -->
-      <div v-else>
-        <!-- Table Header -->
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <div class="grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
-            <div class="col-span-3">BRANCH NAME</div>
-            <div class="col-span-3">ASSIGNED SERVICES</div>
-            <div class="col-span-4">SLOTS SUMMARY</div>
-            <div class="col-span-2">ACTIONS</div>
-          </div>
-        </div>
-
-        <!-- Branch List -->
-        <div class="divide-y divide-gray-200">
-        <div v-for="branch in branches" :key="branch.id" class="px-6 py-4 hover:bg-gray-50">
-          <div class="grid grid-cols-12 gap-4 items-center">
-            <!-- Branch Name -->
-            <div class="col-span-3">
-              <div class="flex items-center gap-3">
-                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div>
-                  <h3 class="font-semibold text-gray-900">{{ branch.name }}</h3>
-                  <p class="text-sm text-gray-600">{{ branch.location }}</p>
+      <!-- Branch List -->
+      <div v-else class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Services</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slots</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="branch in branches" :key="branch.id">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ branch.name }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ branch.location }}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="service in branch.services"
+                    :key="service.id"
+                    :class="service.badgeClass"
+                    class="px-2 py-1 rounded-full text-xs font-medium">
+                    {{ service.name }}
+                  </span>
                 </div>
-              </div>
-            </div>
-
-            <!-- Assigned Services -->
-            <div class="col-span-3">
-              <div class="flex flex-wrap gap-2">
-                <span 
-                  v-for="service in branch.services" 
-                  :key="service"
-                  :class="getServiceBadgeClass(service)"
-                  class="px-2 py-1 rounded-full text-xs font-medium"
-                >
-                  {{ service }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Slots Summary -->
-            <div class="col-span-4">
-              <div class="flex items-center gap-4 text-sm">
-                <span class="text-gray-700">
-                  <span class="font-medium">Morning:</span> {{ branch.slots.morning }} slots
-                </span>
-                <span class="text-gray-700">
-                  <span class="font-medium">Noon:</span> {{ branch.slots.noon }} slots
-                </span>
-                <span class="text-gray-700">
-                  <span class="font-medium">Evening:</span> {{ branch.slots.evening }} slots
-                </span>
-              </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="col-span-2">
-              <div class="flex items-center gap-2">
-                <button class="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                  </svg>
-                </button>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <div class="space-y-1">
+                  <div>Morning: {{ branch.slots.morning }}</div>
+                  <div>Noon: {{ branch.slots.noon }}</div>
+                  <div>Evening: {{ branch.slots.evening }}</div>
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <button
                   @click="deleteBranch(branch.id)"
-                  class="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                  </svg>
+                  class="text-red-600 hover:text-red-900">
+                  Delete
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -306,10 +300,10 @@ onMounted(() => {
             <label class="block text-sm font-medium text-gray-700 mb-3">Available Services</label>
             <div class="grid grid-cols-2 gap-4">
               <div v-for="service in availableServices" :key="service.id" class="flex items-center">
-                <input 
+                <input
                   :id="service.id"
-                  v-model="newBranch.selectedServices"
-                  :value="service.name"
+                  v-model="newBranch.selectedServiceIds"
+                  :value="service.id"
                   type="checkbox"
                   class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                 />

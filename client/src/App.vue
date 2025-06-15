@@ -86,7 +86,7 @@ onMounted(()=>{
         <template v-else>
           <div>{{ currentRoute }}</div>
           <div class="flex items-center gap-2">
-            <span>{{ currentUser.username }}</span>
+            <span>{{ currentUser?.username }}</span>
             <img :src="image" class="w-10 h-10" alt="user image">
           </div>
         </template>
