@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { db } from '@/Config/firebase'
-import { collection, addDoc, getDocs, doc, deleteDoc } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore'
 import { useToast } from 'vue-toastification'
 
 const toast = useToast()
@@ -11,8 +11,10 @@ const isLoading = ref(false)
 const isFetching = ref(false)
 const isSubmitting = ref(false)
 const showCreateForm = ref(false)
+const showEditForm = ref(false)
 const showDeleteConfirm = ref(false)
 const branchToDelete = ref(null)
+const branchToEdit = ref(null)
 const branches = ref([])
 const availableServices = ref([])
 const servicesMap = ref({}) // Map to store service details by ID
@@ -147,6 +149,62 @@ const openCreateForm = () => {
   showCreateForm.value = true
 }
 
+const openEditForm = (branch) => {
+  branchToEdit.value = {
+    id: branch.id,
+    name: branch.name,
+    location: branch.location,
+    selectedServiceIds: branch.services.filter(service => service).map(service => service.id),
+    slots: {
+      morning: parseInt(branch.slots.morning) || 0,
+      noon: parseInt(branch.slots.noon) || 0,
+      evening: parseInt(branch.slots.evening) || 0
+    }
+  }
+  showEditForm.value = true
+}
+
+const closeEditForm = () => {
+  showEditForm.value = false
+  branchToEdit.value = null
+}
+
+const updateBranch = async () => {
+  if (branchToEdit.value.name && branchToEdit.value.location && branchToEdit.value.selectedServiceIds.length > 0) {
+    isSubmitting.value = true
+    try {
+      const branchRef = doc(db, 'branches', branchToEdit.value.id)
+      
+      // Filter out any null/undefined values in selectedServiceIds
+      const validServiceIds = branchToEdit.value.selectedServiceIds.filter(Boolean)
+      
+      const updatedBranch = {
+        name: branchToEdit.value.name,
+        location: branchToEdit.value.location,
+        serviceIds: validServiceIds,
+        slots: {
+          morning: parseInt(branchToEdit.value.slots.morning) || 0,
+          noon: parseInt(branchToEdit.value.slots.noon) || 0,
+          evening: parseInt(branchToEdit.value.slots.evening) || 0
+        }
+      }
+
+      await updateDoc(branchRef, updatedBranch)
+      await fetchBranches()
+      
+      closeEditForm()
+      toast.success('Branch updated successfully!')
+    } catch (error) {
+      console.error('Error updating branch:', error)
+      toast.error('Error updating branch. Please try again.')
+    } finally {
+      isSubmitting.value = false
+    }
+  } else {
+    toast.warning('Please fill in all required fields and select at least one service.')
+  }
+}
+
 const closeCreateForm = () => {
   showCreateForm.value = false
   // Reset form
@@ -197,7 +255,7 @@ onMounted(loadData)
     <!-- All Branches Section -->
     <div class="bg-white rounded-lg shadow-sm">
       <div class="p-6 border-b border-gray-200">
-        <h2 class="text-xl font-semibold text-gray-900">All Branches</h2>
+        <h2 class="text-xl fontopenEditForm-semibold text-gray-900">All Branches</h2>
         <p class="text-gray-600 mt-1">Manage your branch locations and services</p>
       </div>
       
@@ -255,11 +313,18 @@ onMounted(loadData)
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                <button
-                  @click="confirmDelete(branch)"
-                  class="text-red-600 hover:text-red-900">
-                  Delete
-                </button>
+                <div class="flex gap-4">
+                  <button
+                    @click="openEditForm(branch)"
+                    class="text-blue-600 hover:text-blue-900">
+                    Edit
+                  </button>
+                  <button
+                    @click="confirmDelete(branch)"
+                    class="text-red-600 hover:text-red-900">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -413,6 +478,128 @@ onMounted(loadData)
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Edit Branch Modal -->
+  <div v-if="showEditForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <!-- Modal Header -->
+      <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xl font-semibold text-gray-900">Edit Branch</h3>
+          <button
+            @click="closeEditForm"
+            class="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body -->
+      <form @submit.prevent="updateBranch" class="p-6 space-y-6">
+        <!-- Branch Name -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Branch Name</label>
+          <input
+            v-model="branchToEdit.name"
+            type="text"
+            required
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter branch name"
+          />
+        </div>
+
+        <!-- Location -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+          <input
+            v-model="branchToEdit.location"
+            type="text"
+            required
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter branch location"
+          />
+        </div>
+
+        <!-- Services -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-3">Available Services</label>
+          <div class="grid grid-cols-2 gap-4">
+            <div v-for="service in availableServices" :key="service.id" class="flex items-center">
+              <input
+                :id="'edit-' + service.id"
+                v-model="branchToEdit.selectedServiceIds"
+                :value="service.id"
+                type="checkbox"
+                class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <label :for="'edit-' + service.id" class="ml-2 text-sm text-gray-700">
+                {{ service.name }}
+                <span :class="service.badgeClass" class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium">
+                  {{ service.type }}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slot Configuration -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-3">Slot Configuration</label>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Morning Slots</label>
+              <input
+                v-model.number="branchToEdit.slots.morning"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Noon Slots</label>
+              <input
+                v-model.number="branchToEdit.slots.noon"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Evening Slots</label>
+              <input
+                v-model.number="branchToEdit.slots.evening"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <button
+            type="button"
+            @click="closeEditForm"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            :disabled="isSubmitting"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <div v-if="isSubmitting" class="animate-spin rounded-full h-4 w-4 border-2 border-white"></div>
+            {{ isSubmitting ? 'Saving...' : 'Save Changes' }}
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </template>
