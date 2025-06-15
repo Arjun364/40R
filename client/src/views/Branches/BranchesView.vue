@@ -32,6 +32,13 @@ const newBranch = reactive({
 })
 
 // Methods
+const checkBranchNameExists = (name, excludeBranchId = null) => {
+  return branches.value.some(branch =>
+    branch.name.toLowerCase() === name.toLowerCase() &&
+    branch.id !== excludeBranchId
+  )
+}
+
 const loadData = async () => {
   isLoading.value = true
   try {
@@ -98,6 +105,10 @@ const fetchServices = async () => {
 
 const createBranch = async () => {
   if (newBranch.name && newBranch.location && newBranch.selectedServiceIds.length > 0) {
+    if (checkBranchNameExists(newBranch.name)) {
+      toast.error('A branch with this name already exists')
+      return
+    }
     isSubmitting.value = true
     try {
       const branch = {
@@ -171,6 +182,10 @@ const closeEditForm = () => {
 
 const updateBranch = async () => {
   if (branchToEdit.value.name && branchToEdit.value.location && branchToEdit.value.selectedServiceIds.length > 0) {
+    if (checkBranchNameExists(branchToEdit.value.name, branchToEdit.value.id)) {
+      toast.error('A branch with this name already exists')
+      return
+    }
     isSubmitting.value = true
     try {
       const branchRef = doc(db, 'branches', branchToEdit.value.id)
