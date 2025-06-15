@@ -122,8 +122,8 @@ const handleLogin = async () => {
         </div>
         <div class="mt-6 text-center space-y-1">
           <p class="text-gray-600 text-sm">Demo credentials:</p>
-          <p class="text-gray-600 text-sm">Email: admin@example.com</p>
-          <p class="text-gray-600 text-sm">Password: admin</p>
+          <p class="text-gray-600 text-sm">Email: aleenaisadmin@gmail.com</p>
+          <p class="text-gray-600 text-sm">Password: 123456</p>
         </div>
       </form>
     </div>
