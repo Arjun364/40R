@@ -2,6 +2,9 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { db } from '@/Config/firebase'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 // Reactive state
 const isLoading = ref(true)
@@ -40,7 +43,7 @@ const fetchServices = async () => {
     }))
   } catch (error) {
     console.error('Error fetching services:', error)
-    alert('Error loading services. Please try again.')
+    toast.error('Failed to load services. Please try again.')
   } finally {
     isLoading.value = false
   }
@@ -49,7 +52,19 @@ const fetchServices = async () => {
 const createService = async () => {
   isSaving.value = true
   if (!newService.name || !newService.type || !newService.price) {
-    alert('Please fill in all required fields')
+    toast.warning('Please fill in all required fields')
+    isSaving.value = false
+    return
+  }
+
+  // Check if service with same name already exists
+  const existingService = services.value.find(
+    service => service.name.toLowerCase() === newService.name.toLowerCase()
+  )
+  
+  if (existingService) {
+    toast.warning('A service with this name already exists')
+    isSaving.value = false
     return
   }
 
@@ -79,9 +94,10 @@ const createService = async () => {
     })
     
     showForm.value = true
+    toast.success('Service created successfully!')
   } catch (error) {
     console.error('Error creating service:', error)
-    alert('Error creating service. Please try again.')
+    toast.error('Failed to create service. Please try again.')
   } finally {
     isSaving.value = false
   }
@@ -102,7 +118,8 @@ const editService = (service) => {
 const updateService = async () => {
   isSaving.value = true
   if (!newService.name || !newService.type || !newService.price) {
-    alert('Please fill in all required fields')
+    toast.warning('Please fill in all required fields')
+    isSaving.value = false
     return
   }
 
@@ -137,9 +154,10 @@ const updateService = async () => {
     isEditing.value = false
     editingServiceId.value = null
     showForm.value = true
+    toast.success('Service updated successfully!')
   } catch (error) {
     console.error('Error updating service:', error)
-    alert('Error updating service. Please try again.')
+    toast.error('Failed to update service. Please try again.')
   } finally {
     isSaving.value = false
   }
@@ -150,9 +168,10 @@ const deleteService = async (serviceId) => {
     try {
       await deleteDoc(doc(db, 'services', serviceId))
       services.value = services.value.filter(service => service.id !== serviceId)
+      toast.success('Service deleted successfully!')
     } catch (error) {
       console.error('Error deleting service:', error)
-      alert('Error deleting service. Please try again.')
+      toast.error('Failed to delete service. Please try again.')
     }
   }
 }

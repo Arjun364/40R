@@ -2,12 +2,17 @@
 import { ref, reactive, onMounted } from 'vue'
 import { db } from '@/Config/firebase'
 import { collection, addDoc, getDocs, doc, deleteDoc } from 'firebase/firestore'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 // Reactive state
 const isLoading = ref(false)
 const isFetching = ref(false)
 const isSubmitting = ref(false)
 const showCreateForm = ref(false)
+const showDeleteConfirm = ref(false)
+const branchToDelete = ref(null)
 const branches = ref([])
 const availableServices = ref([])
 const servicesMap = ref({}) // Map to store service details by ID
@@ -54,7 +59,7 @@ const fetchBranches = async () => {
     })
   } catch (error) {
     console.error('Error fetching branches:', error)
-    alert('Error loading branches. Please try again.')
+    toast.error('Error loading branches. Please try again.')
   } finally {
     isFetching.value = false
   }
@@ -85,7 +90,7 @@ const fetchServices = async () => {
     
   } catch (error) {
     console.error('Error fetching services:', error)
-    alert('Error loading services. Please try again.')
+    toast.error('Error loading services. Please try again.')
   }
 }
 
@@ -106,23 +111,34 @@ const createBranch = async () => {
       await fetchBranches()
       
       closeCreateForm()
+      toast.success('Branch created successfully!')
     } catch (error) {
       console.error('Error creating branch:', error)
-      alert('Error creating branch. Please try again.')
+      toast.error('Error creating branch. Please try again.')
     } finally {
       isSubmitting.value = false
     }
+  } else {
+    toast.warning('Please fill in all required fields and select at least one service.')
   }
 }
 
-const deleteBranch = async (branchId) => {
+const confirmDelete = (branch) => {
+  branchToDelete.value = branch
+  showDeleteConfirm.value = true
+}
+
+const deleteBranch = async () => {
   try {
-    await deleteDoc(doc(db, 'branches', branchId))
+    await deleteDoc(doc(db, 'branches', branchToDelete.value.id))
     // Remove the branch from local state
-    branches.value = branches.value.filter(branch => branch.id !== branchId)
+    branches.value = branches.value.filter(branch => branch.id !== branchToDelete.value.id)
+    toast.success('Branch deleted successfully!')
+    showDeleteConfirm.value = false
+    branchToDelete.value = null
   } catch (error) {
     console.error('Error deleting branch:', error)
-    alert('Error deleting branch. Please try again.')
+    toast.error('Error deleting branch. Please try again.')
   }
 }
 
@@ -240,7 +256,7 @@ onMounted(loadData)
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <button
-                  @click="deleteBranch(branch.id)"
+                  @click="confirmDelete(branch)"
                   class="text-red-600 hover:text-red-900">
                   Delete
                 </button>
@@ -370,6 +386,32 @@ onMounted(loadData)
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Branch</h3>
+          <p class="text-gray-600">
+            Are you sure you want to delete branch "{{ branchToDelete?.name }}"? This action cannot be undone.
+          </p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 rounded-b-lg">
+          <button
+            @click="showDeleteConfirm = false"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="deleteBranch"
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+          >
+            Delete Branch
+          </button>
+        </div>
       </div>
     </div>
   </div>
