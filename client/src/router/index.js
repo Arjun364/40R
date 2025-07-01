@@ -4,6 +4,7 @@ import LoginView from '@/views/Auth/Login.vue'
 import DashboardView from '@/views/Dashboard/DashboardView.vue'
 import BranchesView from '@/views/Branches/BranchesView.vue'
 import ServicesView from '@/views/Services/ServicesView.vue'
+import BookingsView from '@/views/Bookings/BookingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -33,6 +34,12 @@ const router = createRouter({
       path: '/services',
       name: 'services',
       component: ServicesView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bookings',
+      name: 'bookings',
+      component: BookingsView,
       meta: { requiresAuth: true }
     }
   ]
