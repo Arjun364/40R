@@ -165,21 +165,23 @@
           >
             Previous
           </button>
-          <div class="flex items-center space-x-1">
-            <button
-              v-for="page in totalPages"
-              :key="page"
-              @click="currentPage = page"
-              :class="[
-                'px-3 py-1 rounded-md text-sm font-medium',
-                currentPage === page
-                  ? 'bg-gray-800 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              ]"
-            >
-              {{ page }}
-            </button>
-            </div>
+          <div class="flex items-center">
+            <template v-for="item in paginationItems" :key="item">
+              <span v-if="item === '...'" class="px-2 text-gray-500">...</span>
+              <button
+                v-else
+                @click="currentPage = item"
+                :class="[
+                  'px-3 py-1 rounded-md text-sm font-medium mx-0.5',
+                  currentPage === item
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ]"
+              >
+                {{ item }}
+              </button>
+            </template>
+          </div>
           </div>
           <button
             @click="currentPage++"
@@ -230,6 +232,26 @@ const searchQuery = ref('')
 // Reset page when search changes
 watch(searchQuery, () => {
   currentPage.value = 1
+})
+
+// Computed property for pagination display
+const paginationItems = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+
+  if (current <= 3) {
+    return [1, 2, 3, 4, '...', total]
+  }
+
+  if (current >= total - 2) {
+    return [1, '...', total - 3, total - 2, total - 1, total]
+  }
+
+  return [1, '...', current - 1, current, current + 1, '...', total]
 })
 
 // Computed properties for pagination and filtering
